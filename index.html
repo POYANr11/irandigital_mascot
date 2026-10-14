@@ -6,7 +6,6 @@
 <meta name="theme-color" content="#eef1f2">
 <title>Mascot Runner</title>
 <style>
-  /* Layout: one pixel-art stage centred on a quiet field, hint text underneath. */
   :root {
     --bg: #eef1f2;
     --ink: #3b3a40;
@@ -44,7 +43,6 @@
     image-rendering: pixelated;
     outline: none;
   }
-  /* Touch devices get an on-screen "fall faster" button. */
   .drop-btn {
     display: none;
     align-items: center; justify-content: center;
@@ -60,7 +58,6 @@
     .drop-btn { display: flex; }
   }
 
-  /* Leaderboard: button row, toast line and the two dialogs (name entry, top 10). */
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; }
   .toast { min-height: 1.6em; margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-soft); text-align: center; direction: rtl; }
   .chip, .btn {
@@ -134,12 +131,7 @@
 <script>
 (() => {
 'use strict';
-
-/* ======================================================================
-   SPRITES  (ASCII pixel art, generated once; edit freely)
-   ' . ' transparent · K outline · W C S D body shades · E eye
-   Y R h i  glowing ring · L l w  antenna bulb · G g d cactus · F O cloud
-   ====================================================================== */
+  
 const SPR = {
   mascot: {
   stand: [
@@ -580,7 +572,6 @@ function sprite(rows, key, variant) {
   return c;
 }
 
-/* 5x7 pixel font for the score and "GAME OVER" */
 const FONT = {
   '0':['.###.','#...#','#..##','#.#.#','##..#','#...#','.###.'],
   '1':['..#..','.##..','..#..','..#..','..#..','..#..','.###.'],
@@ -603,11 +594,6 @@ const FONT = {
   I:['.###.','..#..','..#..','..#..','..#..','..#..','.###.']
 };
 
-/* ======================================================================
-   CONFIG — taken from Chrome's offline Runner (chromium: components/neterror/resources/offline.js)
-   Physics are frame-based (60 steps/s); we run a fixed 60 Hz timestep so
-   they feel identical on 60/120/144 Hz screens.
-   ====================================================================== */
 const FPS = 60, STEP = 1000 / FPS;
 const CFG = {
   SPEED: 6, MAX_SPEED: 13, ACCELERATION: 0.001,
@@ -616,29 +602,24 @@ const CFG = {
   CLEAR_TIME: 3000, GAMEOVER_CLEAR_TIME: 750,
   MOBILE_SPEED_COEFFICIENT: 1.2, DEFAULT_WIDTH: 600,
   GRAVITY: 0.6, INITIAL_JUMP_VELOCITY: -10, DROP_VELOCITY: -5, SPEED_DROP_COEFFICIENT: 3,
-  MIN_RISE: 30, MAX_RISE: 63,           // Chrome: MIN/MAX_JUMP_HEIGHT 30 above a ground y of 93
+  MIN_RISE: 30, MAX_RISE: 63,
   DIST_COEFFICIENT: 0.025, MAX_SCORE: 99999,
   CLOUD_FREQUENCY: 0.5, MAX_CLOUDS: 6, MIN_CLOUD_GAP: 100, MAX_CLOUD_GAP: 400,
   MIN_SKY: 30, MAX_SKY: 71
 };
-const H = 150;                  // logical height (Chrome DEFAULT_HEIGHT)
-const LINE_Y = 136;             // row of the ground line; sprites stand on top of it
+const H = 150;
+const LINE_Y = 136;
 const MASCOT = { w: 36, h: 44, x: 40,
-  // trimmed hit boxes in sprite space (x, y, w, h): body cap, body middle, body base, feet
   boxes: [[10,10,15,6],[5,16,24,16],[8,32,18,6],[7,38,21,5]] };
 const OBSTACLES = [
   { id:'small', key:'cactusSmall', rows:SPR.cactusSmall, boxes:SPR.cactusSmallBoxes, width:17, height:35, minGap:120, multipleSpeed:4, minSpeed:0 },
   { id:'large', key:'cactusLarge', rows:SPR.cactusLarge, boxes:SPR.cactusLargeBoxes, width:25, height:50, minGap:120, multipleSpeed:7, minSpeed:0 }
 ];
-// Chrome also has pterodactyls (minSpeed 8.5). They need ducking, which this simple version leaves out.
 
-/* ======================================================================
-   STATE
-   ====================================================================== */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let W = 600;                    // logical width, set by resize()
-let state = 'idle';             // idle | playing | over
+let W = 600;
+let state = 'idle';
 let baseSpeed = CFG.SPEED, speed = CFG.SPEED, widthFactor = 1;
 let runningTime = 0, distance = 0, tick = 0;
 let gameOverAt = 0;
@@ -670,17 +651,16 @@ function updateJump() {
   if (m.y > m.ground) { m.y = m.ground; m.jumping = false; m.speedDrop = false; m.vel = 0; m.jumpCount++; }
 }
 
-/* ---------- horizon: ground, clouds, obstacles (Chrome's algorithm) ---------- */
 let obstacles = [], obstacleHistory = [], clouds = [], groundX = 0;
 
 const groundTex = (() => {
   const c = document.createElement('canvas');
   c.width = 1200; c.height = 16;
   const x = c.getContext('2d');
-  x.fillStyle = INK;  x.fillRect(0, 2, 1200, 1);                       // the line
-  for (let i = 0; i < 1200;) { const l = rnd(2, 6); if (Math.random() < 0.18) x.fillRect(i, 1, l, 1); i += rnd(14, 60); } // little humps
+  x.fillStyle = INK;  x.fillRect(0, 2, 1200, 1);
+  for (let i = 0; i < 1200;) { const l = rnd(2, 6); if (Math.random() < 0.18) x.fillRect(i, 1, l, 1); i += rnd(14, 60); }
   x.fillStyle = '#aab2b7';
-  for (let r = 0; r < 3; r++) for (let i = rnd(0, 20); i < 1200; i += rnd(18, 70)) x.fillRect(i, 5 + r * 3, rnd(1, 4), 1); // gravel
+  for (let r = 0; r < 3; r++) for (let i = rnd(0, 20); i < 1200; i += rnd(18, 70)) x.fillRect(i, 5 + r * 3, rnd(1, 4), 1);
   return c;
 })();
 
@@ -713,14 +693,13 @@ function addCloud() {
   clouds.push({ x: W, y: rnd(CFG.MIN_SKY, CFG.MAX_SKY), gap: rnd(CFG.MIN_CLOUD_GAP, CFG.MAX_CLOUD_GAP) });
 }
 function updateClouds() {
-  for (const c of clouds) c.x -= 1;                 // Chrome's clouds crawl at ~1px per frame
+  for (const c of clouds) c.x -= 1;
   clouds = clouds.filter(c => c.x + 46 > 0);
   const last = clouds[clouds.length - 1];
   if (!last) addCloud();
   else if (clouds.length < CFG.MAX_CLOUDS && W - last.x > last.gap && CFG.CLOUD_FREQUENCY > Math.random()) addCloud();
 }
 
-/* ---------- collision (Chrome: outer box first, then trimmed boxes) ---------- */
 const hit = (a, b) => a[0] < b[0] + b[2] && a[0] + a[2] > b[0] && a[1] < b[1] + b[3] && a[1] + a[3] > b[1];
 function collides() {
   const mx = MASCOT.x, my = mascot.y;
@@ -737,7 +716,6 @@ function collides() {
   return false;
 }
 
-/* ---------- game flow ---------- */
 function effectiveSpeed(s) { return s * widthFactor; }
 function resetWorld() {
   runningTime = 0; distance = 0; obstacles = []; obstacleHistory = [];
@@ -748,7 +726,7 @@ function resetWorld() {
 let flashUntil = 0, lastHundred = 0;
 const score = () => Math.min(CFG.MAX_SCORE, Math.round(distance * CFG.DIST_COEFFICIENT));
 
-function press() {                       // jump key / tap pressed
+function press() {
   if (modalOpen()) return;
   if (state === 'idle') { resetWorld(); state = 'playing'; beginRun(); startJump(); }
   else if (state === 'playing') startJump();
@@ -762,11 +740,6 @@ function gameOver() {
   afterGameOver(s);
 }
 
-/* ======================================================================
-   LEADERBOARD (optional, needs the FastAPI server from /server)
-   LEADERBOARD_API:  null = off · '' = same server that serves this page · 'https://api.example.ir' = another server
-   The server decides whether a score is believable (see server/scoring.py); the page only reports it.
-   ====================================================================== */
 const LEADERBOARD_API = "https://digiknowe.s16.viptelbot.top";
 const lbOn = LEADERBOARD_API !== null;
 const $ = id => document.getElementById(id);
@@ -810,7 +783,6 @@ async function api(path, opts = {}) {
   return data;
 }
 
-// every run gets a signed token from the server; its timestamp is what caps the score later
 function beginRun() {
   runToken = null;
   if (!lbOn) return;
@@ -820,7 +792,7 @@ function beginRun() {
 
 async function afterGameOver(s) {
   if (!lbOn || s < 1 || !runToken) return;
-  if (player && s <= player.best) return;                  // not a personal best: nothing to report
+  if (player && s <= player.best) return;
   const token = runToken;
   if (!player) {
     if (askedThisSession) return;
@@ -867,7 +839,7 @@ function boardRow(rank, name, score, mine) {
   const li = document.createElement('li');
   li.className = 'row' + (mine ? ' me' : '');
   for (const [cls, text] of [['rk', fa(rank)], ['nm', name], ['sc', fa(score)]]) {
-    const s = document.createElement('span'); s.className = cls; s.textContent = text; li.append(s);   // textContent: names can never inject markup
+    const s = document.createElement('span'); s.className = cls; s.textContent = text; li.append(s);
   }
   return li;
 }
@@ -916,9 +888,6 @@ function step() {
   if (mascot.animT >= FPS / 12) { mascot.animT = 0; mascot.frame ^= 1; }
 }
 
-/* ======================================================================
-   DRAW
-   ====================================================================== */
 function drawText(str, x, y, color, sc) {
   ctx.fillStyle = color;
   for (const ch of str) {
@@ -955,7 +924,6 @@ function draw() {
   const [name, variant] = mascotFrame();
   ctx.drawImage(sprite(SPR.mascot[name], 'm-' + name, variant), MASCOT.x, mascot.y);
 
-  // score (flashes every 100 points, like Chrome)
   const showScore = !(performance.now() < flashUntil && Math.floor(performance.now() / 125) % 2 === 1);
   const sx = W - 10 - textWidth('00000', 2);
   if (showScore) drawText(pad5(score()), sx, 8, INK, 2);
@@ -969,9 +937,6 @@ function draw() {
   }
 }
 
-/* ======================================================================
-   LOOP, INPUT, RESIZE
-   ====================================================================== */
 let last = 0, acc = 0;
 function frame(t) {
   requestAnimationFrame(frame);
@@ -985,7 +950,7 @@ document.addEventListener('visibilitychange', () => { last = 0; acc = 0; });
 const JUMP_KEYS = new Set(['Space', 'ArrowUp', 'KeyW', 'Enter']);
 let keyHeld = false;
 window.addEventListener('keydown', e => {
-  if (modalOpen()) return;                       // typing a name must not make the mascot jump
+  if (modalOpen()) return;
   if (JUMP_KEYS.has(e.code)) {
     e.preventDefault();
     if (e.repeat) return;
@@ -1003,11 +968,9 @@ window.addEventListener('pointerdown', e => {
   if (activePointer !== null) return;
   activePointer = e.pointerId; startY = e.clientY; press();
 });
-// swipe down while in the air = fall faster
 window.addEventListener('pointermove', e => {
   if (e.pointerId === activePointer && state === 'playing' && mascot.jumping && e.clientY - startY > 28) setSpeedDrop();
 });
-// on-screen "fall faster" button (touch devices)
 document.getElementById('drop').addEventListener('pointerdown', e => {
   e.preventDefault(); e.stopPropagation();
   if (state === 'playing' && mascot.jumping) setSpeedDrop();
@@ -1019,14 +982,13 @@ window.addEventListener('contextmenu', e => e.preventDefault());
 
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  const avail = Math.min(window.innerWidth - 32, 1200);          // css px, inside the 16px gutters
-  const k = avail >= 1120 ? 2 : 1;                                // css px per game pixel
-  const s = Math.max(1, Math.round(k * dpr));                     // device px per game pixel (integer = crisp)
+  const avail = Math.min(window.innerWidth - 32, 1200);
+  const k = avail >= 1120 ? 2 : 1;
+  const s = Math.max(1, Math.round(k * dpr));
   W = Math.max(240, Math.min(CFG.DEFAULT_WIDTH, Math.floor(avail * dpr / s)));
   canvas.width = W; canvas.height = H;
   canvas.style.width = (W * s / dpr) + 'px';
   canvas.style.height = (H * s / dpr) + 'px';
-  // Chrome slows the game down on narrow canvases so reaction time stays the same
   widthFactor = Math.min(1, W / CFG.DEFAULT_WIDTH * CFG.MOBILE_SPEED_COEFFICIENT);
   speed = effectiveSpeed(baseSpeed);
   ctx.imageSmoothingEnabled = false;
