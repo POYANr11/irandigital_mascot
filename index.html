@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="fa" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#eef1f2">
+<title>Mascot Runner</title>
+<style>
+  /* Layout: one pixel-art stage centred on a quiet field, hint text underneath. */
+  :root {
+    --bg: #eef1f2;
+    --ink: #3b3a40;
+    --ink-soft: #6f777d;
+    --key: #ffffff;
+    --key-line: #c2cbd0;
+    --glow: #ffe3a3;
+    color-scheme: light;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    padding-inline: 16px;
+    padding-block: 16px;
+    box-sizing: border-box;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, "Segoe UI", Tahoma, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .stage { width: 100%; display: flex; justify-content: center; }
+  #game {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: pixelated;
+    outline: none;
+  }
+  /* Touch devices get an on-screen "fall faster" button. */
+  .drop-btn {
+    display: none;
+    align-items: center; justify-content: center;
+    width: 84px; height: 60px; padding: 0;
+    font: 600 24px/1 system-ui, sans-serif; color: var(--ink);
+    background: var(--key);
+    border: 2px solid var(--ink); border-bottom-width: 6px; border-radius: 14px;
+    touch-action: none; cursor: pointer;
+  }
+  .drop-btn:active { transform: translateY(3px); border-bottom-width: 3px; }
+  .drop-btn:focus-visible { outline: 3px solid #f4a23c; outline-offset: 3px; }
+  @media (hover: none) and (pointer: coarse) {
+    .drop-btn { display: flex; }
+  }
+
+  /* Leaderboard: button row, toast line and the two dialogs (name entry, top 10). */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; }
+  .toast { min-height: 1.6em; margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-soft); text-align: center; direction: rtl; }
+  .chip, .btn {
+    font: 600 15px/1 system-ui, "Segoe UI", Tahoma, sans-serif; color: var(--ink); background: var(--key);
+    border: 2px solid var(--ink); border-bottom-width: 4px; border-radius: 12px; padding: 11px 18px;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .chip:active, .btn:active { transform: translateY(2px); border-bottom-width: 2px; }
+  .btn.primary { background: var(--glow); }
+  .chip:focus-visible, .btn:focus-visible, .x:focus-visible, #nameInput:focus-visible { outline: 3px solid #f4a23c; outline-offset: 3px; }
+  .modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(59, 58, 64, 0.5); touch-action: auto; }
+  .modal[hidden] { display: none; }
+  .sheet { box-sizing: border-box; width: 100%; max-width: 420px; max-height: 86vh; overflow: auto; margin: 0;
+    background: #fff; color: var(--ink); border: 2px solid var(--ink); border-radius: 16px; padding: 20px;
+    touch-action: pan-y; user-select: text; -webkit-user-select: text; }
+  .sheet h2 { margin: 0; font-size: 19px; line-height: 1.4; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+  .x { font: 600 16px/1 system-ui, sans-serif; width: 36px; height: 36px; color: var(--ink); background: transparent;
+    border: 2px solid var(--key-line); border-radius: 10px; cursor: pointer; }
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .row { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 10px; align-items: baseline;
+    padding: 9px 8px; border-bottom: 1px solid #e3e8ea; font-variant-numeric: tabular-nums; }
+  .row .rk { color: var(--ink-soft); }
+  .row:nth-child(-n+3) .rk { color: var(--ink); font-weight: 600; }
+  .row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; text-align: start; }
+  .row.me { background: #fff3d6; border-radius: 8px; border-bottom-color: transparent; }
+  .row.gap { color: var(--ink-soft); justify-content: center; border: 0; padding: 0 8px; display: block; text-align: center; }
+  .note { margin: 8px 0 0; font-size: 14px; line-height: 1.8; color: var(--ink-soft); }
+  .err { min-height: 1.4em; margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #b3402a; }
+  #nameInput { box-sizing: border-box; width: 100%; margin-top: 14px; padding: 11px 12px;
+    font: 16px system-ui, "Segoe UI", Tahoma, sans-serif; color: var(--ink); background: #fff;
+    border: 2px solid var(--ink); border-radius: 10px; user-select: text; -webkit-user-select: text; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<main class="stage"><canvas id="game" tabindex="0" aria-label="Mascot Runner"></canvas></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="bar">
+  <button class="chip" id="lbBtn" type="button" hidden>لیدربورد</button>
+  <button class="drop-btn" id="drop" type="button" aria-label="Fall faster">▼</button>
+</div>
+
+<div class="modal" id="lbModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lbTitle" dir="rtl">
+    <div class="sheet-head">
+      <h2 id="lbTitle">لیدربورد</h2>
+      <button class="x" id="lbClose" type="button" aria-label="بستن">✕</button>
+    </div>
+    <ol class="rows" id="lbRows"></ol>
+    <p class="note" id="lbNote"></p>
+    <div class="actions"><button class="btn primary" id="lbName" type="button" hidden>انتخاب اسم</button></div>
+  </div>
+</div>
+
+<div class="modal" id="nameModal" hidden>
+  <form class="sheet" id="nameForm" role="dialog" aria-modal="true" aria-labelledby="nameTitle" dir="rtl" autocomplete="off">
+    <h2 id="nameTitle">اسمت چیه؟</h2>
+    <p class="note">با این اسم تو لیدربورد دیده می‌شی. اسم یکتاست و بعداً قابل تغییر نیست.</p>
+    <input id="nameInput" type="text" maxlength="20" placeholder="اسمت رو بنویس (حداکثر ۱۶ حرف)" autocapitalize="off" autocorrect="off" spellcheck="false" dir="auto">
+    <p class="err" id="nameErr" role="alert"></p>
+    <div class="actions">
+      <button class="btn primary" id="nameOk" type="submit">ثبت اسم</button>
+      <button class="btn" id="nameSkip" type="button">فعلاً نه</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ======================================================================
+   SPRITES  (ASCII pixel art, generated once; edit freely)
+   ' . ' transparent · K outline · W C S D body shades · E eye
+   Y R h i  glowing ring · L l w  antenna bulb · G g d cactus · F O cloud
+   ====================================================================== */
+const SPR = {
+  mascot: {
+  stand: [
+    "..........................KKK.......",
+    ".........................KwLLK......",
+    ".........................KLLLK......",
+    ".........................KLLlK......",
+    "..........................KKK.......",
+    ".....................KKKKK..........",
+    "....................KK..............",
+    "....................K...............",
+    "....................K...............",
+    "..............KKKKKKK...............",
+    "...........KKKWWWCCCCKKK............",
+    ".........KKWWWWWWWWCCCCCKK..........",
+    "........KKWWWWWWWWWWCCCCCKK.........",
+    ".......KWWWWWWWWWWWWCCCCCCSK........",
+    "......KWWWWWWWWWWWWWCCCCCCSSK.......",
+    ".....KWWWWWWWWWWWWWWCCCCCCSSSK......",
+    ".....KWWWWWWWWWWWWWCCCCCCCSSSK......",
+    "....KWWWWWWWWWWWWWWCCCCCCCSSSDK.....",
+    "....KWWWWWWWWWWWWWCCCCCCCCSSSDK.....",
+    "...KCWWWWWWWWWWWWCCCCCCCCCSSSDDK....",
+    "...KCWWWWWWWWWWWCCCCCCCCCSSSSDDK....",
+    "...KhhWWWWWWWWWCCCCCCCCCCSSSSEEK....",
+    "..RRRRhhhWWWWCCCCCCCCCCCSSSSSEEK....",
+    "...YYYRRRhhhhCCCCCCCCCCSSSSSDEEK....",
+    "...RRRYYYRRRRhhhhhCCCCSSSSSSDEEK....",
+    "...KhhRRRYYYYRRRRRhhhiiiiiiiiiiK....",
+    "...KCChhhRRRRYYYYYRRRRRRRRRRRRRR....",
+    "...KCCCCChhhhRRRRRYYYYYYYYYYYYYYR...",
+    "...KSCCCCCCCChhhhiRRRRRRRRRRRRRR....",
+    "....KSSCCCCCCCSSSSiiiiiiiiiiiiK.....",
+    "....KSSSSSSSSSSSSSSSSSDDDDDDDDK.....",
+    ".....KSSSSSSSSSSSSSSDDDDDDDDDK......",
+    ".....KDSSSSSSSSSSSDDDDDDDDDDDK......",
+    "......KDDSSSSSSDDDDDDDDDDDDDK.......",
+    ".......KDDDDDDDDDDDDDDDDDDDK........",
+    "........KKDDDDDDDDDDDDDDDKKK........",
+    "......KKCKKDDDDDDDDDDDDDKKCSKK......",
+    "......KCCCCKKKDDDDDDDKKKCCCCSK......",
+    ".....KCCCCCCSSKKKKKKKCCCCCCSSDK.....",
+    ".....KCCCCCSSSDK....KCCCCCSSSDK.....",
+    ".....KSSSSSSSDDK....KSSSSSSSDDK.....",
+    "......KSSSSDDDK......KSSSSDDDK......",
+    "......KKDDDDDKK......KKDDDDDKK......",
+    "........KKKKK..........KKKKK........"
+  ],
+  blink: [
+    "..........................KKK.......",
+    ".........................KwLLK......",
+    ".........................KLLLK......",
+    ".........................KLLlK......",
+    "..........................KKK.......",
+    ".....................KKKKK..........",
+    "....................KK..............",
+    "....................K...............",
+    "....................K...............",
+    "..............KKKKKKK...............",
+    "...........KKKWWWCCCCKKK............",
+    ".........KKWWWWWWWWCCCCCKK..........",
+    "........KKWWWWWWWWWWCCCCCKK.........",
+    ".......KWWWWWWWWWWWWCCCCCCSK........",
+    "......KWWWWWWWWWWWWWCCCCCCSSK.......",
+    ".....KWWWWWWWWWWWWWWCCCCCCSSSK......",
+    ".....KWWWWWWWWWWWWWCCCCCCCSSSK......",
+    "....KWWWWWWWWWWWWWWCCCCCCCSSSDK.....",
+    "....KWWWWWWWWWWWWWCCCCCCCCSSSDK.....",
+    "...KCWWWWWWWWWWWWCCCCCCCCCSSSDDK....",
+    "...KCWWWWWWWWWWWCCCCCCCCCSSSSDDK....",
+    "...KhhWWWWWWWWWCCCCCCCCCCSSSSDDK....",
+    "..RRRRhhhWWWWCCCCCCCCCCCSSSSSDDK....",
+    "...YYYRRRhhhhCCCCCCCCCCSSSSSDEEK....",
+    "...RRRYYYRRRRhhhhhCCCCSSSSSSDDDK....",
+    "...KhhRRRYYYYRRRRRhhhiiiiiiiiiiK....",
+    "...KCChhhRRRRYYYYYRRRRRRRRRRRRRR....",
+    "...KCCCCChhhhRRRRRYYYYYYYYYYYYYYR...",
+    "...KSCCCCCCCChhhhiRRRRRRRRRRRRRR....",
+    "....KSSCCCCCCCSSSSiiiiiiiiiiiiK.....",
+    "....KSSSSSSSSSSSSSSSSSDDDDDDDDK.....",
+    ".....KSSSSSSSSSSSSSSDDDDDDDDDK......",
+    ".....KDSSSSSSSSSSSDDDDDDDDDDDK......",
+    "......KDDSSSSSSDDDDDDDDDDDDDK.......",
+    ".......KDDDDDDDDDDDDDDDDDDDK........",
+    "........KKDDDDDDDDDDDDDDDKKK........",
+    "......KKCKKDDDDDDDDDDDDDKKCSKK......",
+    "......KCCCCKKKDDDDDDDKKKCCCCSK......",
+    ".....KCCCCCCSSKKKKKKKCCCCCCSSDK.....",
+    ".....KCCCCCSSSDK....KCCCCCSSSDK.....",
+    ".....KSSSSSSSDDK....KSSSSSSSDDK.....",
+    "......KSSSSDDDK......KSSSSDDDK......",
+    "......KKDDDDDKK......KKDDDDDKK......",
+    "........KKKKK..........KKKKK........"
+  ],
+  run1: [
+    "..........................KKK.......",
+    ".........................KwLLK......",
+    ".........................KLLLK......",
+    ".........................KLLlK......",
+    "..........................KKK.......",
+    ".....................KKKKK..........",
+    "....................KK..............",
+    "....................K...............",
+    "....................K...............",
+    "..............KKKKKKK...............",
+    "...........KKKWWWCCCCKKK............",
+    ".........KKWWWWWWWWCCCCCKK..........",
+    "........KKWWWWWWWWWWCCCCCKK.........",
+    ".......KWWWWWWWWWWWWCCCCCCSK........",
+    "......KWWWWWWWWWWWWWCCCCCCSSK.......",
+    ".....KWWWWWWWWWWWWWWCCCCCCSSSK......",
+    ".....KWWWWWWWWWWWWWCCCCCCCSSSK......",
+    "....KWWWWWWWWWWWWWWCCCCCCCSSSDK.....",
+    "....KWWWWWWWWWWWWWCCCCCCCCSSSDK.....",
+    "...KCWWWWWWWWWWWWCCCCCCCCCSSSDDK....",
+    "...KCWWWWWWWWWWWCCCCCCCCCSSSSDDK....",
+    "...KhhWWWWWWWWWCCCCCCCCCCSSSSEEK....",
+    "..RRRRhhhWWWWCCCCCCCCCCCSSSSSEEK....",
+    "...YYYRRRhhhhCCCCCCCCCCSSSSSDEEK....",
+    "...RRRYYYRRRRhhhhhCCCCSSSSSSDEEK....",
+    "...KhhRRRYYYYRRRRRhhhiiiiiiiiiiK....",
+    "...KCChhhRRRRYYYYYRRRRRRRRRRRRRR....",
+    "...KCCCCChhhhRRRRRYYYYYYYYYYYYYYR...",
+    "...KSCCCCCCCChhhhiRRRRRRRRRRRRRR....",
+    "....KSSCCCCCCCSSSSiiiiiiiiiiiiK.....",
+    "....KSSSSSSSSSSSSSSSSSDDDDDDDDK.....",
+    ".....KSSSSSSSSSSSSSSDDDDDDDDDK......",
+    ".....KDSSSSSSSSSSSDDDDDDDDDDDK......",
+    ".....KKDDSSSSSSDDDDDDDDDDDDDK.......",
+    "....KCCKDDDDDDDDDDDDDDDDDDDK........",
+    "...KCCCCKKDDDDDDDDDDDDDDDKKKK.......",
+    "...KCCCCCKKDDDDDDDDDDDDDKKCCSKK.....",
+    "...KCCCCSSSKKKDDDDDDDKKKCCCCCSK.....",
+    "...KSSSSSSDDDKKKKKKKKKCCCCCCSSDK....",
+    "....KDDDDDDDK........KCCCCCSSSDK....",
+    ".....KKKDKKK.........KSSSSSSSDDK....",
+    "........K.............KSSSSDDDK.....",
+    "......................KKDDDDDKK.....",
+    "........................KKKKK......."
+  ],
+  run2: [
+    "....................................",
+    "..........................KKK.......",
+    ".........................KwLLK......",
+    ".........................KLLLK......",
+    ".........................KLLlK......",
+    "......................KKKKKKK.......",
+    ".....................KK..K..........",
+    "....................KK..............",
+    "....................K...............",
+    "....................K...............",
+    "..............KKKKKKK...............",
+    "...........KKKWWWCCCCKKK............",
+    ".........KKWWWWWWWWCCCCCKK..........",
+    "........KKWWWWWWWWWWCCCCCKK.........",
+    ".......KWWWWWWWWWWWWCCCCCCSK........",
+    "......KWWWWWWWWWWWWWCCCCCCSSK.......",
+    ".....KWWWWWWWWWWWWWWCCCCCCSSSK......",
+    ".....KWWWWWWWWWWWWWCCCCCCCSSSK......",
+    "....KWWWWWWWWWWWWWWCCCCCCCSSSDK.....",
+    "....KWWWWWWWWWWWWWCCCCCCCCSSSDK.....",
+    "...KCWWWWWWWWWWWWCCCCCCCCCSSSDDK....",
+    "...KCWWWWWWWWWWWCCCCCCCCCSSSSDDK....",
+    "...KhhWWWWWWWWWCCCCCCCCCCSSSSEEK....",
+    "..RRRRhhhWWWWCCCCCCCCCCCSSSSSEEK....",
+    "...YYYRRRhhhhCCCCCCCCCCSSSSSDEEK....",
+    "...RRRYYYRRRRhhhhhCCCCSSSSSSDEEK....",
+    "...KhhRRRYYYYRRRRRhhhiiiiiiiiiiK....",
+    "...KCChhhRRRRYYYYYRRRRRRRRRRRRRR....",
+    "...KCCCCChhhhRRRRRYYYYYYYYYYYYYYR...",
+    "...KSCCCCCCCChhhhiRRRRRRRRRRRRRR....",
+    "....KSSCCCCCCCSSSSiiiiiiiiiiiiK.....",
+    "....KSSSSSSSSSSSSSSSSSDDDDDDDDK.....",
+    ".....KSSSSSSSSSSSSSSDDDDDDDDDK......",
+    ".....KDSSSSSSSSSSSDDDDDDDDDDDK......",
+    "......KDDSSSSSSDDDDDDDDDDDDDK.......",
+    ".......KDDDDDDDDDDDDDDDDDDDKK.......",
+    ".......KKKDDDDDDDDDDDDDDDKKSK.......",
+    ".......KCKKDDDDDDDDDDDDDKKSDK.......",
+    "......KCCCCKKKDDDDDDDKKKSDDDK.......",
+    "......KCCCCCSSKKKKKKKDDDDDDKK.......",
+    "......KSSSSSSSDDK....KKKKKK.........",
+    ".......KSSSSDDDK....................",
+    ".......KKDDDDDKK....................",
+    ".........KKKKK......................"
+  ],
+  jump: [
+    "....................................",
+    "....................................",
+    ".........................KKK........",
+    "........................KwLLK.......",
+    "........................KLLLK.......",
+    "........................KLLlK.......",
+    ".....................KKKKKKK........",
+    "....................KK..K...........",
+    "....................K...............",
+    "..............KKKKKKK...............",
+    "...........KKKWWWCCCCKKK............",
+    ".........KKWWWWWWWWCCCCCKK..........",
+    "........KKWWWWWWWWWWCCCCCKK.........",
+    ".......KWWWWWWWWWWWWCCCCCCSK........",
+    "......KWWWWWWWWWWWWWCCCCCCSSK.......",
+    ".....KWWWWWWWWWWWWWWCCCCCCSSSK......",
+    ".....KWWWWWWWWWWWWWCCCCCCCSSSK......",
+    "....KWWWWWWWWWWWWWWCCCCCCCSSSDK.....",
+    "....KWWWWWWWWWWWWWCCCCCCCCSSSDK.....",
+    "...KCWWWWWWWWWWWWCCCCCCCCCSSSDDK....",
+    "...KCWWWWWWWWWWWCCCCCCCCCSSSSDDK....",
+    "...KhhWWWWWWWWWCCCCCCCCCCSSSSEEK....",
+    "..RRRRhhhWWWWCCCCCCCCCCCSSSSSEEK....",
+    "...YYYRRRhhhhCCCCCCCCCCSSSSSDEEK....",
+    "...RRRYYYRRRRhhhhhCCCCSSSSSSDEEK....",
+    "...KhhRRRYYYYRRRRRhhhiiiiiiiiiiK....",
+    "...KCChhhRRRRYYYYYRRRRRRRRRRRRRR....",
+    "...KCCCCChhhhRRRRRYYYYYYYYYYYYYYR...",
+    "...KSCCCCCCCChhhhiRRRRRRRRRRRRRR....",
+    "....KSSCCCCCCCSSSSiiiiiiiiiiiiK.....",
+    "....KSSSSSSSSSSSSSSSSSDDDDDDDDK.....",
+    ".....KSSSSSSSSSSSSSSDDDDDDDDDK......",
+    ".....KDSSSSSSSSSSSDDDDDDDDDDDK......",
+    "......KDDSSSSSSDDDDDDDDDDDDDK.......",
+    ".......KDDDDDDDDDDDDDDDDDDDK........",
+    "........KKDDDDDDDDDDDDDDDKKK........",
+    ".......KCKKDDDDDDDDDDDDDKKSDK.......",
+    ".......KCCCKKKDDDDDDDKKKSSSDK.......",
+    ".......KSSSSSSKKKKKKKSSSSSDDK.......",
+    "........KSSSSDDDK..KSSSSDDDK........",
+    "........KKDDDDDKK..KKDDDDDKK........",
+    "..........KKKKK......KKKKK..........",
+    "....................................",
+    "...................................."
+  ],
+  dead: [
+    "....................................",
+    "....................................",
+    "....................................",
+    "...........................KKK......",
+    "..........................KwLLK.....",
+    "..........................KLLLK.....",
+    "..........................KLLlK.....",
+    ".....................KKKKKKKKK......",
+    "....................KK....K.........",
+    "....................K...............",
+    "..............KKKKKKK...............",
+    "...........KKKWWWCCCCKKK............",
+    ".........KKWWWWWWWWCCCCCKK..........",
+    "........KKWWWWWWWWWWCCCCCKK.........",
+    ".......KWWWWWWWWWWWWCCCCCCSK........",
+    "......KWWWWWWWWWWWWWCCCCCCSSK.......",
+    ".....KWWWWWWWWWWWWWWCCCCCCSSSK......",
+    ".....KWWWWWWWWWWWWWCCCCCCCSSSK......",
+    "....KWWWWWWWWWWWWWWCCCCCCCSSSDK.....",
+    "....KWWWWWWWWWWWWWCCCCCCCCSSSDK.....",
+    "...KCWWWWWWWWWWWWCCCCCCCCCSSSDDK....",
+    "...KCWWWWWWWWWWWCCCCCCCCCSSSSDDK....",
+    "...KhhWWWWWWWWWCCCCCCCCCCSSSEDEK....",
+    "..RRRRhhhWWWWCCCCCCCCCCCSSSSSEDK....",
+    "...YYYRRRhhhhCCCCCCCCCCSSSSSEDEK....",
+    "...RRRYYYRRRRhhhhhCCCCSSSSSSDDDK....",
+    "...KhhRRRYYYYRRRRRhhhiiiiiiiiiiK....",
+    "...KCChhhRRRRYYYYYRRRRRRRRRRRRRR....",
+    "...KCCCCChhhhRRRRRYYYYYYYYYYYYYYR...",
+    "...KSCCCCCCCChhhhiRRRRRRRRRRRRRR....",
+    "....KSSCCCCCCCSSSSiiiiiiiiiiiiK.....",
+    "....KSSSSSSSSSSSSSSSSSDDDDDDDDK.....",
+    ".....KSSSSSSSSSSSSSSDDDDDDDDDK......",
+    ".....KDSSSSSSSSSSSDDDDDDDDDDDK......",
+    "......KDDSSSSSSDDDDDDDDDDDDDK.......",
+    ".....KKKDDDDDDDDDDDDDDDDDDDKKKK.....",
+    "....KKCCKKDDDDDDDDDDDDDDDKKCCCKK....",
+    "...KCCCCCKKDDDDDDDDDDDDDKKCCCCSSK...",
+    "...KCCCCCCSKKKDDDDDDDKKKCCCCCCSSK...",
+    "..KSCCCCCSSDDKKKKKKKK.KSCCCCCSSDDK..",
+    "...KSSSSSSDDK..........KSSSSSSDDK...",
+    "...KSSSSDDDDK..........KSSSSDDDDK...",
+    "....KKDDDDKK............KKDDDDKK....",
+    ".....KKKKKK..............KKKKKK....."
+  ]
+  },
+  cactusSmall: [
+    ".......KKK.......",
+    "......KGGGK......",
+    ".....KgGGGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGGGdK..K..",
+    ".....KgGGGdK.KGK.",
+    ".....KgGdGdKKgGdK",
+    ".....KgGdGdKKgGdK",
+    "..K..KgGdGdKKgGdK",
+    ".KGK.KgGGGdKKgGdK",
+    "KgGdKKgGGGdKKgGdK",
+    "KgGdKKgGGGdKKgGdK",
+    "KgGdKKgGdGdKKgGdK",
+    "KgGdKKgGdGdgggGdK",
+    "KgGdKKgGdGdGGgGdK",
+    "KgGdKKgGGGdddgGdK",
+    "KgGdKKgGGGdKKKKK.",
+    "KgGdKKgGGGdK.....",
+    "KgGdKKgGdGdK.....",
+    "KgGdgggGdGdK.....",
+    "KgGdGGgGdGdK.....",
+    "KgGdddgGGGdK.....",
+    ".KKKKKgGGGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGdGdK.....",
+    ".....KgGdGdK.....",
+    ".....KgGdGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGdGdK.....",
+    ".....KgGdGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGGGdK.....",
+    ".....KgGGGdK....."
+  ],
+  cactusSmallBoxes: [[6,1,5,34],[1,9,3,13],[13,5,3,11]],
+  cactusLarge: [
+    "..........KKKKK..........",
+    ".........KGGGGGK.........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGdGGdK....KK..",
+    "........KgGGGGGdK...KGGK.",
+    "........KgGGGGGdK..KgGGdK",
+    "........KgGGGGGdK..KgGGdK",
+    "........KgGGdGGdK..KgGGdK",
+    "..KK....KgGGdGGdK..KgGGdK",
+    ".KGGK...KgGGdGGdK..KgGGdK",
+    "KgGGdK..KgGGGGGdK..KgGGdK",
+    "KgGGdK..KgGGGGGdK..KgGGdK",
+    "KgGGdK..KgGGGGGdK..KgGGdK",
+    "KgGGdK..KgGGdGGdK..KgGGdK",
+    "KgGGdK..KgGGdGGdK..KgGGdK",
+    "KgGGdK..KgGGdGGdK..KgGGdK",
+    "KgGGdK..KgGGGGGdKKKKgGGdK",
+    "KgGGdK..KgGGGGGdgggggGGdK",
+    "KgGGdK..KgGGGGGdGGGGgGGdK",
+    "KgGGdK..KgGGdGGdGGGGgGGdK",
+    "KgGGdK..KgGGdGGdddddgGGdK",
+    "KgGGdK..KgGGdGGdKKKKKKKK.",
+    "KgGGdKKKKgGGGGGdK........",
+    "KgGGdgggggGGGGGdK........",
+    "KgGGdGGGGgGGGGGdK........",
+    "KgGGdGGGGgGGdGGdK........",
+    "KgGGdddddgGGdGGdK........",
+    ".KKKKKKKKgGGdGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGdGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........",
+    "........KgGGGGGdK........"
+  ],
+  cactusLargeBoxes: [[9,1,7,49],[1,14,4,18],[20,9,4,17]],
+  cloud: [
+    "................OOOOOO........................",
+    "..............OOFFFFFFOO....OOOO..............",
+    ".............OFFFFFFFFFFO.OOFFFFOO............",
+    ".............OFFFFFFFFFFOOFFFFFFFFO...........",
+    ".......OOOO.OFFFFFFFFFFFFFFFFFFFFFFO..........",
+    ".....OOFFFFOOFFFFFFFFFFFFFFFFFFFFFFOOOOO......",
+    "....OFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFO.....",
+    "....OFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFO....",
+    "...OFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFO...",
+    "...OFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFO...",
+    "...OFFFFFFFFFFFFFFFFFFFFOFFFFFFFFFFFFFFFFFFO..",
+    "...OFFFFFFFFFFFFFFFFFFFFOFFFFFFFFFFFFFFFFFO...",
+    "....OOOOOOOOOOOOOOOOOOOO.OOOOOOOOOOOOOOOOO....",
+    ".............................................."
+  ],
+  restart: [
+    "...........KK....",
+    ".......KKK.KKK...",
+    ".....KKKKKKKKKK..",
+    "...KKKKKKKKKKKK..",
+    "...KKK....KKKKKK.",
+    "..KKK.....KKK....",
+    "..KK.....KK......",
+    ".KKK.............",
+    ".KKK.........KKK.",
+    ".KKK.........KKK.",
+    "..KK.........KK..",
+    "..KKK.......KKK..",
+    "...KKK.....KKK...",
+    "...KKKKKKKKKKK...",
+    ".....KKKKKKK.....",
+    ".......KKK.......",
+    "................."
+  ]
+};
+
+const PAL = {
+  K:'#3b3a40', W:'#fdfbf6', C:'#efe9dc', S:'#d8d0bf', D:'#bfb6a3', E:'#141414',
+  Y:'#ffd978', R:'#f4a23c', h:'#f8e8c4', i:'#e3cfa3',
+  L:'#fff0b8', l:'#ffbf4d', w:'#ffffff',
+  G:'#8fa07c', g:'#b2c29b', d:'#5d6e50', F:'#ffffff', O:'#c2cbd0'
+};
+const VARIANTS = {
+  on:   {},
+  dim:  { Y:'#ffe6a2', R:'#f8b455', L:'#ffe9a0', l:'#ffcf72' },
+  dead: { Y:'#d8d3c6', R:'#bdb7aa', h:'#efe9dc', i:'#d8d0bf', L:'#d8d3c6', l:'#bdb7aa', w:'#e6e2d8' }
+};
+const BG = '#eef1f2', INK = '#3b3a40', INK_SOFT = '#7f878d';
+
+const cache = new Map();
+function sprite(rows, key, variant) {
+  const k = key + ':' + (variant || 'on');
+  let c = cache.get(k);
+  if (c) return c;
+  const over = VARIANTS[variant || 'on'];
+  c = document.createElement('canvas');
+  c.width = rows[0].length; c.height = rows.length;
+  const x = c.getContext('2d');
+  for (let y = 0; y < rows.length; y++)
+    for (let i = 0; i < rows[y].length; i++) {
+      const ch = rows[y][i];
+      if (ch === '.') continue;
+      x.fillStyle = over[ch] || PAL[ch];
+      x.fillRect(i, y, 1, 1);
+    }
+  cache.set(k, c);
+  return c;
+}
+
+/* 5x7 pixel font for the score and "GAME OVER" */
+const FONT = {
+  '0':['.###.','#...#','#..##','#.#.#','##..#','#...#','.###.'],
+  '1':['..#..','.##..','..#..','..#..','..#..','..#..','.###.'],
+  '2':['.###.','#...#','....#','...#.','..#..','.#...','#####'],
+  '3':['.###.','#...#','....#','..##.','....#','#...#','.###.'],
+  '4':['...#.','..##.','.#.#.','#..#.','#####','...#.','...#.'],
+  '5':['#####','#....','####.','....#','....#','#...#','.###.'],
+  '6':['..##.','.#...','#....','####.','#...#','#...#','.###.'],
+  '7':['#####','....#','...#.','..#..','.#...','.#...','.#...'],
+  '8':['.###.','#...#','#...#','.###.','#...#','#...#','.###.'],
+  '9':['.###.','#...#','#...#','.####','....#','...#.','.##..'],
+  G:['.###.','#...#','#....','#.###','#...#','#...#','.###.'],
+  A:['.###.','#...#','#...#','#####','#...#','#...#','#...#'],
+  M:['#...#','##.##','#.#.#','#.#.#','#...#','#...#','#...#'],
+  E:['#####','#....','#....','####.','#....','#....','#####'],
+  O:['.###.','#...#','#...#','#...#','#...#','#...#','.###.'],
+  V:['#...#','#...#','#...#','#...#','#...#','.#.#.','..#..'],
+  R:['####.','#...#','#...#','####.','#.#..','#..#.','#...#'],
+  H:['#...#','#...#','#...#','#####','#...#','#...#','#...#'],
+  I:['.###.','..#..','..#..','..#..','..#..','..#..','.###.']
+};
+
+/* ======================================================================
+   CONFIG — taken from Chrome's offline Runner (chromium: components/neterror/resources/offline.js)
+   Physics are frame-based (60 steps/s); we run a fixed 60 Hz timestep so
+   they feel identical on 60/120/144 Hz screens.
+   ====================================================================== */
+const FPS = 60, STEP = 1000 / FPS;
+const CFG = {
+  SPEED: 6, MAX_SPEED: 13, ACCELERATION: 0.001,
+  GAP_COEFFICIENT: 0.6, MAX_GAP_COEFFICIENT: 1.5,
+  MAX_OBSTACLE_LENGTH: 3, MAX_OBSTACLE_DUPLICATION: 2,
+  CLEAR_TIME: 3000, GAMEOVER_CLEAR_TIME: 750,
+  MOBILE_SPEED_COEFFICIENT: 1.2, DEFAULT_WIDTH: 600,
+  GRAVITY: 0.6, INITIAL_JUMP_VELOCITY: -10, DROP_VELOCITY: -5, SPEED_DROP_COEFFICIENT: 3,
+  MIN_RISE: 30, MAX_RISE: 63,           // Chrome: MIN/MAX_JUMP_HEIGHT 30 above a ground y of 93
+  DIST_COEFFICIENT: 0.025, MAX_SCORE: 99999,
+  CLOUD_FREQUENCY: 0.5, MAX_CLOUDS: 6, MIN_CLOUD_GAP: 100, MAX_CLOUD_GAP: 400,
+  MIN_SKY: 30, MAX_SKY: 71
+};
+const H = 150;                  // logical height (Chrome DEFAULT_HEIGHT)
+const LINE_Y = 136;             // row of the ground line; sprites stand on top of it
+const MASCOT = { w: 36, h: 44, x: 40,
+  // trimmed hit boxes in sprite space (x, y, w, h): body cap, body middle, body base, feet
+  boxes: [[10,10,15,6],[5,16,24,16],[8,32,18,6],[7,38,21,5]] };
+const OBSTACLES = [
+  { id:'small', key:'cactusSmall', rows:SPR.cactusSmall, boxes:SPR.cactusSmallBoxes, width:17, height:35, minGap:120, multipleSpeed:4, minSpeed:0 },
+  { id:'large', key:'cactusLarge', rows:SPR.cactusLarge, boxes:SPR.cactusLargeBoxes, width:25, height:50, minGap:120, multipleSpeed:7, minSpeed:0 }
+];
+// Chrome also has pterodactyls (minSpeed 8.5). They need ducking, which this simple version leaves out.
+
+/* ======================================================================
+   STATE
+   ====================================================================== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 600;                    // logical width, set by resize()
+let state = 'idle';             // idle | playing | over
+let baseSpeed = CFG.SPEED, speed = CFG.SPEED, widthFactor = 1;
+let runningTime = 0, distance = 0, tick = 0;
+let gameOverAt = 0;
+let hi = 0;
+try { hi = parseInt(localStorage.getItem('mascot-runner-hi') || '0', 10) || 0; } catch (e) {}
+
+const rnd = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+
+const mascot = { y: LINE_Y - MASCOT.h, ground: LINE_Y - MASCOT.h,
+  jumping: false, vel: 0, speedDrop: false, reachedMin: false, jumpCount: 0, animT: 0, frame: 0 };
+
+function startJump() {
+  if (mascot.jumping) return;
+  mascot.jumping = true;
+  mascot.vel = CFG.INITIAL_JUMP_VELOCITY - speed / 10;
+  mascot.reachedMin = false;
+  mascot.speedDrop = false;
+}
+function endJump() {
+  if (mascot.reachedMin && mascot.vel < CFG.DROP_VELOCITY) mascot.vel = CFG.DROP_VELOCITY;
+}
+function setSpeedDrop() { mascot.speedDrop = true; mascot.vel = 1; }
+function updateJump() {
+  const m = mascot;
+  m.y += Math.round(m.speedDrop ? m.vel * CFG.SPEED_DROP_COEFFICIENT : m.vel);
+  m.vel += CFG.GRAVITY;
+  if (m.y < m.ground - CFG.MIN_RISE || m.speedDrop) m.reachedMin = true;
+  if (m.y < m.ground - CFG.MAX_RISE || m.speedDrop) endJump();
+  if (m.y > m.ground) { m.y = m.ground; m.jumping = false; m.speedDrop = false; m.vel = 0; m.jumpCount++; }
+}
+
+/* ---------- horizon: ground, clouds, obstacles (Chrome's algorithm) ---------- */
+let obstacles = [], obstacleHistory = [], clouds = [], groundX = 0;
+
+const groundTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = 1200; c.height = 16;
+  const x = c.getContext('2d');
+  x.fillStyle = INK;  x.fillRect(0, 2, 1200, 1);                       // the line
+  for (let i = 0; i < 1200;) { const l = rnd(2, 6); if (Math.random() < 0.18) x.fillRect(i, 1, l, 1); i += rnd(14, 60); } // little humps
+  x.fillStyle = '#aab2b7';
+  for (let r = 0; r < 3; r++) for (let i = rnd(0, 20); i < 1200; i += rnd(18, 70)) x.fillRect(i, 5 + r * 3, rnd(1, 4), 1); // gravel
+  return c;
+})();
+
+function duplicateObstacleCheck(type) {
+  let n = 0;
+  for (const t of obstacleHistory) n = t === type ? n + 1 : 0;
+  return n >= CFG.MAX_OBSTACLE_DUPLICATION;
+}
+function addNewObstacle() {
+  const t = OBSTACLES[rnd(0, OBSTACLES.length - 1)];
+  if (duplicateObstacleCheck(t.id) || speed < t.minSpeed) return addNewObstacle();
+  let size = rnd(1, CFG.MAX_OBSTACLE_LENGTH);
+  if (size > 1 && t.multipleSpeed > speed) size = 1;
+  const width = t.width * size;
+  const minGap = Math.round(width * speed + t.minGap * CFG.GAP_COEFFICIENT);
+  const maxGap = Math.round(minGap * CFG.MAX_GAP_COEFFICIENT);
+  obstacles.push({ t, size, width, x: W - width, y: LINE_Y - t.height, gap: rnd(minGap, maxGap), next: false });
+  obstacleHistory.unshift(t.id);
+  if (obstacleHistory.length > 1) obstacleHistory.splice(CFG.MAX_OBSTACLE_DUPLICATION);
+}
+function updateObstacles() {
+  for (const o of obstacles) o.x -= speed;
+  obstacles = obstacles.filter(o => o.x + o.width > 0);
+  if (obstacles.length) {
+    const last = obstacles[obstacles.length - 1];
+    if (!last.next && last.x + last.width + last.gap < W) { addNewObstacle(); last.next = true; }
+  } else addNewObstacle();
+}
+function addCloud() {
+  clouds.push({ x: W, y: rnd(CFG.MIN_SKY, CFG.MAX_SKY), gap: rnd(CFG.MIN_CLOUD_GAP, CFG.MAX_CLOUD_GAP) });
+}
+function updateClouds() {
+  for (const c of clouds) c.x -= 1;                 // Chrome's clouds crawl at ~1px per frame
+  clouds = clouds.filter(c => c.x + 46 > 0);
+  const last = clouds[clouds.length - 1];
+  if (!last) addCloud();
+  else if (clouds.length < CFG.MAX_CLOUDS && W - last.x > last.gap && CFG.CLOUD_FREQUENCY > Math.random()) addCloud();
+}
+
+/* ---------- collision (Chrome: outer box first, then trimmed boxes) ---------- */
+const hit = (a, b) => a[0] < b[0] + b[2] && a[0] + a[2] > b[0] && a[1] < b[1] + b[3] && a[1] + a[3] > b[1];
+function collides() {
+  const mx = MASCOT.x, my = mascot.y;
+  const outer = [mx + 1, my + 1, MASCOT.w - 2, MASCOT.h - 2];
+  for (const o of obstacles) {
+    if (!hit(outer, [o.x + 1, o.y + 1, o.width - 2, o.t.height - 2])) continue;
+    for (const mb of MASCOT.boxes) {
+      const a = [mx + mb[0], my + mb[1], mb[2], mb[3]];
+      for (let i = 0; i < o.size; i++)
+        for (const ob of o.t.boxes)
+          if (hit(a, [o.x + i * o.t.width + ob[0], o.y + ob[1], ob[2], ob[3]])) return true;
+    }
+  }
+  return false;
+}
+
+/* ---------- game flow ---------- */
+function effectiveSpeed(s) { return s * widthFactor; }
+function resetWorld() {
+  runningTime = 0; distance = 0; obstacles = []; obstacleHistory = [];
+  baseSpeed = CFG.SPEED; speed = effectiveSpeed(baseSpeed);
+  mascot.y = mascot.ground; mascot.jumping = false; mascot.vel = 0; mascot.speedDrop = false;
+  flashUntil = 0; lastHundred = 0;
+}
+let flashUntil = 0, lastHundred = 0;
+const score = () => Math.min(CFG.MAX_SCORE, Math.round(distance * CFG.DIST_COEFFICIENT));
+
+function press() {                       // jump key / tap pressed
+  if (modalOpen()) return;
+  if (state === 'idle') { resetWorld(); state = 'playing'; beginRun(); startJump(); }
+  else if (state === 'playing') startJump();
+  else if (state === 'over' && performance.now() - gameOverAt >= CFG.GAMEOVER_CLEAR_TIME) { resetWorld(); state = 'playing'; beginRun(); }
+}
+function release() { if (state === 'playing' && mascot.jumping) endJump(); }
+function gameOver() {
+  state = 'over'; gameOverAt = performance.now();
+  const s = score();
+  if (s > hi) { hi = s; try { localStorage.setItem('mascot-runner-hi', String(hi)); } catch (e) {} }
+  afterGameOver(s);
+}
+
+/* ======================================================================
+   LEADERBOARD (optional, needs the FastAPI server from /server)
+   LEADERBOARD_API:  null = off · '' = same server that serves this page · 'https://api.example.ir' = another server
+   The server decides whether a score is believable (see server/scoring.py); the page only reports it.
+   ====================================================================== */
+const LEADERBOARD_API = "https://digiknowe.s16.viptelbot.top";
+const lbOn = LEADERBOARD_API !== null;
+const $ = id => document.getElementById(id);
+const fa = n => new Intl.NumberFormat('fa-IR').format(n);
+const API_BASE = lbOn ? String(LEADERBOARD_API).replace(/\/+$/, '') : '';
+const PLAYER_KEY = 'mascot-runner-player';
+let player = null, runToken = null, runSeq = 0, askedThisSession = false, closeName = null, toastTimer = 0;
+try {
+  const p = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
+  if (p && typeof p.token === 'string' && typeof p.name === 'string') player = { name: p.name, token: p.token, best: p.best | 0 };
+} catch (e) {}
+function savePlayer() {
+  try { if (player) localStorage.setItem(PLAYER_KEY, JSON.stringify(player)); else localStorage.removeItem(PLAYER_KEY); } catch (e) {}
+}
+const modalOpen = () => !$('lbModal').hidden || !$('nameModal').hidden;
+
+function toast(msg, ms = 7000) {
+  const el = $('toast');
+  el.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.textContent = ''; }, ms);
+}
+
+async function api(path, opts = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const headers = { 'Content-Type': 'application/json' };
+  if (player) headers['X-Player-Token'] = player.token;
+  let res;
+  try { res = await fetch(API_BASE + '/api' + path, { ...opts, headers, signal: ctrl.signal }); }
+  catch (e) { const err = new Error('network'); err.code = 'network'; throw err; }
+  finally { clearTimeout(timer); }
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const d = data && data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail) ? data.detail : {};
+    const err = new Error(d.message || 'error');
+    err.code = d.code || 'http_' + res.status;
+    throw err;
+  }
+  return data;
+}
+
+// every run gets a signed token from the server; its timestamp is what caps the score later
+function beginRun() {
+  runToken = null;
+  if (!lbOn) return;
+  const seq = ++runSeq;
+  api('/run/start', { method: 'POST' }).then(r => { if (seq === runSeq) runToken = r.token; }).catch(() => {});
+}
+
+async function afterGameOver(s) {
+  if (!lbOn || s < 1 || !runToken) return;
+  if (player && s <= player.best) return;                  // not a personal best: nothing to report
+  const token = runToken;
+  if (!player) {
+    if (askedThisSession) return;
+    askedThisSession = true;
+    if (!(await askName())) return;
+  }
+  try {
+    const r = await api('/score', { method: 'POST', body: JSON.stringify({ run_token: token, score: s }) });
+    player.best = r.best; savePlayer();
+    toast((r.improved ? 'رکورد ثبت شد' : 'امتیازت ثبت شد') + ' · رتبه‌ی تو: ' + fa(r.rank));
+  } catch (e) {
+    if (e.code === 'unknown_player' || e.code === 'no_player') { player = null; savePlayer(); askedThisSession = false; toast('اسمت پیدا نشد؛ دفعه‌ی بعد دوباره اسم انتخاب کن'); }
+    else if (e.code === 'score_rejected') toast('امتیازت تأیید نشد');
+    else if (e.code === 'rate_limited') toast(e.message);
+    else toast('ثبت امتیاز ممکن نشد');
+  }
+}
+
+function askName() {
+  return new Promise(resolve => {
+    const modal = $('nameModal'), form = $('nameForm'), input = $('nameInput'), err = $('nameErr'), ok = $('nameOk');
+    err.textContent = ''; input.value = ''; modal.hidden = false;
+    setTimeout(() => input.focus(), 30);
+    let busy = false;
+    const close = success => { modal.hidden = true; form.onsubmit = null; closeName = null; resolve(success); };
+    closeName = close;
+    $('nameSkip').onclick = () => close(false);
+    form.onsubmit = async ev => {
+      ev.preventDefault();
+      if (busy) return;
+      busy = true; ok.disabled = true; err.textContent = '';
+      try {
+        const r = await api('/player', { method: 'POST', body: JSON.stringify({ name: input.value }) });
+        player = { name: r.name, token: r.token, best: 0 }; savePlayer();
+        close(true);
+      } catch (e) {
+        err.textContent = e.code === 'network' ? 'ارتباط با سرور برقرار نشد' : (e.message && e.message !== 'error' ? e.message : 'ثبت اسم ممکن نشد');
+      } finally { busy = false; ok.disabled = false; }
+    };
+  });
+}
+
+function boardRow(rank, name, score, mine) {
+  const li = document.createElement('li');
+  li.className = 'row' + (mine ? ' me' : '');
+  for (const [cls, text] of [['rk', fa(rank)], ['nm', name], ['sc', fa(score)]]) {
+    const s = document.createElement('span'); s.className = cls; s.textContent = text; li.append(s);   // textContent: names can never inject markup
+  }
+  return li;
+}
+async function openBoard() {
+  if (state === 'playing' || modalOpen()) return;
+  const rows = $('lbRows'), note = $('lbNote'), nameBtn = $('lbName');
+  $('lbModal').hidden = false;
+  rows.replaceChildren(); nameBtn.hidden = true; note.textContent = 'در حال بارگذاری…';
+  try {
+    const d = await api('/leaderboard?limit=10');
+    note.textContent = d.entries.length ? '' : 'هنوز کسی امتیازی ثبت نکرده. اولیش تو باش!';
+    for (const e of d.entries) rows.append(boardRow(e.rank, e.name, e.score, !!d.me && d.me.name === e.name));
+    if (d.me && d.me.rank && d.me.rank > d.entries.length) {
+      const gap = document.createElement('li'); gap.className = 'row gap'; gap.textContent = '…'; rows.append(gap);
+      rows.append(boardRow(d.me.rank, d.me.name, d.me.score, true));
+    }
+    nameBtn.hidden = !!d.me;
+  } catch (e) { note.textContent = 'لیدربورد در دسترس نیست'; }
+}
+if (lbOn) {
+  $('lbBtn').hidden = false;
+  $('lbBtn').onclick = openBoard;
+  $('lbClose').onclick = () => { $('lbModal').hidden = true; };
+  $('lbModal').addEventListener('pointerdown', e => { if (e.target === $('lbModal')) $('lbModal').hidden = true; });
+  $('lbName').onclick = async () => { $('lbModal').hidden = true; if (await askName()) toast('اسمت ثبت شد؛ حالا یه ران خوب بزن'); };
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'Escape') return;
+    if (!$('nameModal').hidden && closeName) closeName(false); else $('lbModal').hidden = true;
+  });
+}
+
+function step() {
+  tick++;
+  if (state !== 'playing') return;
+  runningTime += STEP;
+  if (mascot.jumping) updateJump();
+  groundX = (groundX + speed) % 1200;
+  updateClouds();
+  if (runningTime > CFG.CLEAR_TIME) updateObstacles();
+  if (collides()) { gameOver(); return; }
+  distance += speed;
+  if (baseSpeed < CFG.MAX_SPEED) { baseSpeed += CFG.ACCELERATION; speed = effectiveSpeed(baseSpeed); }
+  const hundred = Math.floor(score() / 100);
+  if (hundred > lastHundred) { lastHundred = hundred; flashUntil = performance.now() + 1000; }
+  mascot.animT++;
+  if (mascot.animT >= FPS / 12) { mascot.animT = 0; mascot.frame ^= 1; }
+}
+
+/* ======================================================================
+   DRAW
+   ====================================================================== */
+function drawText(str, x, y, color, sc) {
+  ctx.fillStyle = color;
+  for (const ch of str) {
+    const g = FONT[ch];
+    if (g) for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) if (g[r][c] === '#') ctx.fillRect(x + c * sc, y + r * sc, sc, sc);
+    x += 6 * sc;
+  }
+}
+const textWidth = (s, sc) => s.length * 6 * sc - sc;
+const pad5 = n => String(n).padStart(5, '0');
+
+function mascotFrame() {
+  if (state === 'over') return ['dead', 'dead'];
+  const glow = (tick >> 5) & 1 ? 'dim' : 'on';
+  if (state === 'idle') return [(tick % 200) < 8 ? 'blink' : 'stand', glow];
+  if (mascot.jumping) return ['jump', glow];
+  return [mascot.frame ? 'run2' : 'run1', glow];
+}
+
+function draw() {
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+
+  for (const c of clouds) ctx.drawImage(sprite(SPR.cloud, 'cloud'), Math.round(c.x), c.y);
+
+  const gx = Math.round(groundX);
+  ctx.drawImage(groundTex, -gx, LINE_Y - 2);
+  ctx.drawImage(groundTex, 1200 - gx, LINE_Y - 2);
+
+  for (const o of obstacles) {
+    const s = sprite(o.t.rows, o.t.key);
+    for (let i = 0; i < o.size; i++) ctx.drawImage(s, Math.round(o.x) + i * o.t.width, o.y);
+  }
+
+  const [name, variant] = mascotFrame();
+  ctx.drawImage(sprite(SPR.mascot[name], 'm-' + name, variant), MASCOT.x, mascot.y);
+
+  // score (flashes every 100 points, like Chrome)
+  const showScore = !(performance.now() < flashUntil && Math.floor(performance.now() / 125) % 2 === 1);
+  const sx = W - 10 - textWidth('00000', 2);
+  if (showScore) drawText(pad5(score()), sx, 8, INK, 2);
+  if (hi > 0) drawText('HI ' + pad5(hi), sx - 12 - textWidth('HI 00000', 2), 8, INK_SOFT, 2);
+
+  if (state === 'over') {
+    const t = 'GAME OVER';
+    drawText(t, Math.round((W - textWidth(t, 2)) / 2), 44, INK, 2);
+    const ic = sprite(SPR.restart, 'restart');
+    ctx.drawImage(ic, Math.round((W - ic.width * 2) / 2), 68, ic.width * 2, ic.height * 2);
+  }
+}
+
+/* ======================================================================
+   LOOP, INPUT, RESIZE
+   ====================================================================== */
+let last = 0, acc = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (!last) last = t;
+  acc += Math.min(t - last, 100); last = t;
+  while (acc >= STEP) { step(); acc -= STEP; }
+  draw();
+}
+document.addEventListener('visibilitychange', () => { last = 0; acc = 0; });
+
+const JUMP_KEYS = new Set(['Space', 'ArrowUp', 'KeyW', 'Enter']);
+let keyHeld = false;
+window.addEventListener('keydown', e => {
+  if (modalOpen()) return;                       // typing a name must not make the mascot jump
+  if (JUMP_KEYS.has(e.code)) {
+    e.preventDefault();
+    if (e.repeat) return;
+    keyHeld = true; press();
+  } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+    e.preventDefault();
+    if (state === 'playing' && mascot.jumping) setSpeedDrop();
+  }
+});
+window.addEventListener('keyup', e => { if (JUMP_KEYS.has(e.code)) { keyHeld = false; release(); } });
+
+let activePointer = null, startY = 0;
+window.addEventListener('pointerdown', e => {
+  if (e.target.closest && e.target.closest('a, button, .modal')) return;
+  if (activePointer !== null) return;
+  activePointer = e.pointerId; startY = e.clientY; press();
+});
+// swipe down while in the air = fall faster
+window.addEventListener('pointermove', e => {
+  if (e.pointerId === activePointer && state === 'playing' && mascot.jumping && e.clientY - startY > 28) setSpeedDrop();
+});
+// on-screen "fall faster" button (touch devices)
+document.getElementById('drop').addEventListener('pointerdown', e => {
+  e.preventDefault(); e.stopPropagation();
+  if (state === 'playing' && mascot.jumping) setSpeedDrop();
+});
+const up = e => { if (e.pointerId === activePointer) { activePointer = null; release(); } };
+window.addEventListener('pointerup', up);
+window.addEventListener('pointercancel', up);
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const avail = Math.min(window.innerWidth - 32, 1200);          // css px, inside the 16px gutters
+  const k = avail >= 1120 ? 2 : 1;                                // css px per game pixel
+  const s = Math.max(1, Math.round(k * dpr));                     // device px per game pixel (integer = crisp)
+  W = Math.max(240, Math.min(CFG.DEFAULT_WIDTH, Math.floor(avail * dpr / s)));
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = (W * s / dpr) + 'px';
+  canvas.style.height = (H * s / dpr) + 'px';
+  // Chrome slows the game down on narrow canvases so reaction time stays the same
+  widthFactor = Math.min(1, W / CFG.DEFAULT_WIDTH * CFG.MOBILE_SPEED_COEFFICIENT);
+  speed = effectiveSpeed(baseSpeed);
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(frame);
+
+})();
+</script>
+
+</body>
+</html>
